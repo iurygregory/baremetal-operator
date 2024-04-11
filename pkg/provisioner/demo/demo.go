@@ -306,3 +306,7 @@ func (p *demoProvisioner) RemoveBMCEventSubscriptionForNode(_ metal3api.BMCEvent
 func (p *demoProvisioner) GetFirmwareComponents() (components []metal3api.FirmwareComponentStatus, err error) {
 	return components, nil
 }
+
+func (p *demoProvisioner) SupportsFirmwareUpdate() (err error) {
+	return nil
+}

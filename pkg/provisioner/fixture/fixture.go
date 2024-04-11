@@ -353,3 +353,7 @@ func (p *fixtureProvisioner) RemoveBMCEventSubscriptionForNode(_ metal3api.BMCEv
 func (p *fixtureProvisioner) GetFirmwareComponents() (components []metal3api.FirmwareComponentStatus, err error) {
 	return components, nil
 }
+
+func (p *fixtureProvisioner) SupportsFirmwareUpdate() (err error) {
+	return nil
+}

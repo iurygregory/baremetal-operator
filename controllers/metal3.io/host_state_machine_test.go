@@ -1401,6 +1401,10 @@ func (p *mockProvisioner) GetFirmwareComponents() (components []metal3api.Firmwa
 	return components, nil
 }
 
+func (p *mockProvisioner) SupportsFirmwareUpdate() (err error) {
+	return nil
+}
+
 func TestUpdateBootModeStatus(t *testing.T) {
 	testCases := []struct {
 		Scenario       string

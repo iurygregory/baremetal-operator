@@ -202,8 +202,11 @@ type Provisioner interface {
 	// RemoveBMCEventSubscriptionForNode delete the subscription
 	RemoveBMCEventSubscriptionForNode(subscription metal3api.BMCEventSubscription) (result Result, err error)
 
-	// GetFirmwareComponents gets all firmware components available from a note
+	// GetFirmwareComponents gets all firmware components available from a node
 	GetFirmwareComponents() (components []metal3api.FirmwareComponentStatus, err error)
+
+	// SupportsFirmwareUpdate checks if the node supports firmware update via the firware interface
+	SupportsFirmwareUpdate() (err error)
 }
 
 // Result holds the response from a call in the Provsioner API.

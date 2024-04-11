@@ -1199,6 +1199,23 @@ func (p *ironicProvisioner) GetFirmwareComponents() ([]metal3api.FirmwareCompone
 	return componentsInfo, componentListErr
 }
 
+// SupportsFirmwareUpdate returns the firmwareInterface of a Node.
+func (p *ironicProvisioner) SupportsFirmwareUpdate() error {
+	ironicNode, err := p.getNode()
+	if err != nil {
+		return fmt.Errorf("could not get node to retrieve firmware components: %w", err)
+	}
+
+	if !p.availableFeatures.HasFirmwareUpdates() {
+		return fmt.Errorf("current ironic version does not support firmware updates")
+	}
+
+	if ironicNode.FirmwareInterface != "redfish" {
+		return fmt.Errorf("driver %s does not support firmware updates", ironicNode.Driver)
+	}
+	return nil
+}
+
 // We can't just replace the capabilities because we need to keep the
 // values provided by inspection. We can't replace only the boot_mode
 // because the API isn't fine-grained enough for that. So we have to

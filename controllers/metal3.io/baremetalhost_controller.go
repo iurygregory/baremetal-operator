@@ -881,7 +881,7 @@ func (r *BareMetalHostReconciler) registerHost(prov provisioner.Provisioner, inf
 				info.log.Info("failed creating hostfirmwaresettings")
 				return actionError{errors.Wrap(err, "failed creating hostFirmwareSettings")}
 			}
-			if err = r.createHostFirmwareComponents(info); err != nil {
+			if err = r.createHostFirmwareComponents(info, prov); err != nil {
 				info.log.Info("failed creating hostfirmwarecomponents")
 				return actionError{errors.Wrap(err, "failed creating hostFirmwareComponents")}
 			}
@@ -1516,10 +1516,15 @@ func saveHostProvisioningSettings(host *metal3api.BareMetalHost, info *reconcile
 	return
 }
 
-func (r *BareMetalHostReconciler) createHostFirmwareComponents(info *reconcileInfo) error {
+func (r *BareMetalHostReconciler) createHostFirmwareComponents(info *reconcileInfo, prov provisioner.Provisioner) error {
 	// Check if HostFirmwareComponents already exists
 	hfc := &metal3api.HostFirmwareComponents{}
 	if err := r.Get(info.ctx, info.request.NamespacedName, hfc); err != nil {
+		err = prov.SupportsFirmwareUpdate()
+		if err != nil {
+			return errors.Wrap(err, "could not create hostFirmwareSettings")
+		}
+
 		if k8serrors.IsNotFound(err) {
 			// A resource doesn't exist, create one
 			hfc.ObjectMeta = metav1.ObjectMeta{
@@ -1608,7 +1613,6 @@ func (r *BareMetalHostReconciler) getHostFirmwareSettings(info *reconcileInfo) (
 }
 
 // Get the stored firmware settings if there are valid changes.
-
 func (r *BareMetalHostReconciler) getHostFirmwareComponents(info *reconcileInfo) (dirty bool, hfc *metal3api.HostFirmwareComponents, err error) {
 	hfc = &metal3api.HostFirmwareComponents{}
 	if err = r.Get(info.ctx, info.request.NamespacedName, hfc); err != nil {
