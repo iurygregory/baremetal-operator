@@ -350,7 +350,7 @@ func (hsm *hostStateMachine) ensureRegistered(info *reconcileInfo) (result actio
 		if _, hasInfraEnv := hsm.Host.Labels["infraenvs.agent-install.openshift.io"]; hsm.NextState == metal3api.StateInspecting || hasInfraEnv {
 			if inspectionDisabled(hsm.Host) {
 				// No need to register if we are not actually going to inspect
-				return
+				return nil
 			}
 		}
 		fallthrough
@@ -480,6 +480,12 @@ func (hsm *hostStateMachine) handleAvailable(info *reconcileInfo) actionResult {
 		return actionComplete{}
 	}
 
+	if dirty, _, err := hsm.Reconciler.getHostFirmwareComponents(info); err != nil {
+		return actionError{err}
+	} else if dirty {
+		hsm.NextState = metal3api.StatePreparing
+		return actionComplete{}
+	}
 	// ErrorCount is cleared when appropriate inside actionManageAvailable
 	actResult := hsm.Reconciler.actionManageAvailable(hsm.Provisioner, info)
 	if _, complete := actResult.(actionComplete); complete {

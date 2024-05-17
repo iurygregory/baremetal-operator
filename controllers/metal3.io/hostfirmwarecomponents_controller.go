@@ -181,11 +181,6 @@ func (r *HostFirmwareComponentsReconciler) Reconcile(ctx context.Context, req ct
 // Update the HostFirmwareComponents resource using the components from provisioner.
 func (r *HostFirmwareComponentsReconciler) updateHostFirmware(info *rhfcInfo, components []metal3api.FirmwareComponentStatus) (err error) {
 	dirty := false
-	var newStatus metal3api.HostFirmwareComponentsStatus
-	// change the Updates in Status
-	newStatus.Updates = info.hfc.Spec.Updates
-	// change the Components in Status
-	newStatus.Components = components
 
 	// Check if the updates in the Spec are different than Status
 	updatesMismatch := !reflect.DeepEqual(info.hfc.Status.Updates, info.hfc.Spec.Updates)
@@ -196,8 +191,13 @@ func (r *HostFirmwareComponentsReconciler) updateHostFirmware(info *rhfcInfo, co
 	reason := reasonValidComponent
 	generation := info.hfc.GetGeneration()
 
+	newStatus := info.hfc.Status.DeepCopy()
+	// change the Components in Status
+	newStatus.Components = components
+
 	if updatesMismatch {
-		if setUpdatesCondition(generation, &newStatus, info, metal3api.HostFirmwareComponentsChangeDetected, metav1.ConditionTrue, reason, "") {
+		info.log.Info("updatemismatch is true")
+		if setUpdatesCondition(generation, newStatus, info, metal3api.HostFirmwareComponentsChangeDetected, metav1.ConditionTrue, reason, "") {
 			dirty = true
 		}
 
@@ -205,24 +205,25 @@ func (r *HostFirmwareComponentsReconciler) updateHostFirmware(info *rhfcInfo, co
 		if err != nil {
 			info.publishEvent("ValidationFailed", fmt.Sprintf("Invalid Firmware Components: %s", err))
 			reason = reasonInvalidComponent
-			if setUpdatesCondition(generation, &newStatus, info, metal3api.HostFirmwareComponentsValid, metav1.ConditionFalse, reason, fmt.Sprintf("Invalid Firmware Components: %s", err)) {
+			if setUpdatesCondition(generation, newStatus, info, metal3api.HostFirmwareComponentsValid, metav1.ConditionFalse, reason, fmt.Sprintf("Invalid Firmware Components: %s", err)) {
 				dirty = true
 			}
-		} else if setUpdatesCondition(generation, &newStatus, info, metal3api.HostFirmwareComponentsValid, metav1.ConditionTrue, reason, "") {
+		} else if setUpdatesCondition(generation, newStatus, info, metal3api.HostFirmwareComponentsValid, metav1.ConditionTrue, reason, "") {
 			dirty = true
 		}
 	} else {
-		if setUpdatesCondition(generation, &newStatus, info, metal3api.HostFirmwareComponentsValid, metav1.ConditionTrue, reason, "") {
+		info.log.Info("updatesmismatch is false")
+		if setUpdatesCondition(generation, newStatus, info, metal3api.HostFirmwareComponentsValid, metav1.ConditionTrue, reason, "") {
 			dirty = true
 		}
-		if setUpdatesCondition(generation, &newStatus, info, metal3api.HostFirmwareComponentsChangeDetected, metav1.ConditionFalse, reason, "") {
+		if setUpdatesCondition(generation, newStatus, info, metal3api.HostFirmwareComponentsChangeDetected, metav1.ConditionFalse, reason, "") {
 			dirty = true
 		}
 	}
 
 	// Update Status if has changed
 	if dirty {
-		info.log.Info("Status for HostFirmwareComponents changed")
+		info.log.Info("Status for HostFirmwareComponents changed  based on conditions")
 		info.hfc.Status = *newStatus.DeepCopy()
 
 		t := metav1.Now()
@@ -295,8 +296,9 @@ func setUpdatesCondition(generation int64, status *metal3api.HostFirmwareCompone
 		Reason:             string(reason),
 		Message:            message,
 	}
-	currCond := meta.FindStatusCondition(info.hfc.Status.Conditions, string(cond))
+
 	meta.SetStatusCondition(&status.Conditions, newCondition)
+	currCond := meta.FindStatusCondition(info.hfc.Status.Conditions, string(cond))
 
 	if currCond == nil || currCond.Status != newStatus {
 		return true

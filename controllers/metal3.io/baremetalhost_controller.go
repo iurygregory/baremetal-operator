@@ -1146,6 +1146,7 @@ func (r *BareMetalHostReconciler) actionPreparing(prov provisioner.Provisioner, 
 		return actionContinue{subResourceNotReadyRetryDelay}
 	}
 	if hfcDirty {
+		info.log.Info("adding hfc spec updates to prepareData.targetfirmwarecomponents")
 		prepareData.TargetFirmwareComponents = hfc.Spec.Updates
 	}
 
@@ -1164,6 +1165,22 @@ func (r *BareMetalHostReconciler) actionPreparing(prov provisioner.Provisioner, 
 		return recordActionFailure(info, metal3api.PreparationError, provResult.ErrorMessage)
 	}
 
+	if hfcDirty && started {
+		// handle updating hostfirmwarecomponent
+		info.log.Info("saving host firmware components")
+		hfcStillDirty, err := r.saveHostFirmwareComponents(prov, info, hfc)
+		if err != nil {
+			return actionError{errors.Wrap(err, "could not save the host firmware components")}
+		}
+
+		if hfcStillDirty {
+			info.log.Info("going to update the host firmware components")
+			if err := r.Status().Update(info.ctx, hfc); err != nil {
+				return actionError{errors.Wrap(err, "failed to update hostfirmwarecomponents status")}
+			}
+		}
+	}
+
 	if bmhDirty && started {
 		info.log.Info("saving host provisioning settings")
 		_, err := saveHostProvisioningSettings(info.host, info)
@@ -1175,6 +1192,7 @@ func (r *BareMetalHostReconciler) actionPreparing(prov provisioner.Provisioner, 
 	if started && clearError(info.host) {
 		bmhDirty = true
 	}
+
 	if provResult.Dirty {
 		result := actionContinue{provResult.RequeueAfter}
 		if bmhDirty {
@@ -1740,6 +1758,34 @@ func saveHostProvisioningSettings(host *metal3api.BareMetalHost, info *reconcile
 	return dirty, nil
 }
 
+func (r *BareMetalHostReconciler) saveHostFirmwareComponents(prov provisioner.Provisioner, info *reconcileInfo, hfc *metal3api.HostFirmwareComponents) (dirty bool, err error) {
+	dirty = false
+	if !reflect.DeepEqual(hfc.Status.Updates, hfc.Spec.Updates) {
+		info.log.Info("HostFirmwareComponents Status", "updates", hfc.Status.Updates)
+
+		hfc.Status.Updates = make([]metal3api.FirmwareUpdate, len(hfc.Spec.Updates))
+		for i := range hfc.Spec.Updates {
+			hfc.Spec.Updates[i].DeepCopyInto(&hfc.Status.Updates[i])
+		}
+
+		info.log.Info("re assigned status updates")
+		info.log.Info("New HostFirmwareComponents Status", "updates", hfc.Status.Updates)
+
+		// Retrieve new information about the firmware components stored in ironic
+		components, err := prov.GetFirmwareComponents()
+		if err != nil {
+			info.log.Info("Failed to get new information for firmware components in ironic")
+			return dirty, err
+		}
+		hfc.Status.Components = components
+		t := metav1.Now()
+		hfc.Status.LastUpdated = &t
+		info.log.Info("Updates for HostFirmwareComponents have changed")
+		dirty = true
+	}
+	return dirty, nil
+}
+
 func (r *BareMetalHostReconciler) createHostFirmwareComponents(info *reconcileInfo) error {
 	// Check if HostFirmwareComponents already exists
 	hfc := &metal3api.HostFirmwareComponents{}
@@ -1849,13 +1895,10 @@ func (r *BareMetalHostReconciler) getHostFirmwareComponents(info *reconcileInfo)
 		return false, nil, nil
 	}
 
+	info.log.Info("debug - hfcDirty - checking conditions")
 	// Check if there are Updates in the Spec that are different than the Status
 	if meta.IsStatusConditionTrue(hfc.Status.Conditions, string(metal3api.HostFirmwareComponentsChangeDetected)) {
-		// Check if the status have been populated
-		if len(hfc.Status.Updates) == 0 {
-			return false, nil, errors.New("host firmware status updates not available")
-		}
-
+		info.log.Info("debug - hfcDirty - change detected")
 		if len(hfc.Status.Components) == 0 {
 			return false, nil, errors.New("host firmware status components not available")
 		}
